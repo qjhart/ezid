@@ -1,0 +1,9 @@
+* EZID
+
+This is a simple bash script that is designed to simplify the maintainance of
+ezids.  It's a bash script, but it combines with another set of bash tools.
+This includes [[https://httpie.org/][HTTPIE]] and [[https://stedolan.github.io/jq/][JQ]].  So, you will need to install these packages if you
+want to use this script.
+
+A good review of the organization of the ark: can be found in the [[https://ezid.cdlib.org/learn/id_concepts][ID Concepts]]
+description.

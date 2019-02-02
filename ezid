@@ -1,0 +1,271 @@
+#! /bin/bash
+
+# program at end of file. search #MAIN
+
+: <<=cut
+=pod
+
+=head1  NAME
+
+  ezid - Get, Add and Update ARKS via the EZID api
+
+=head1 USAGE
+
+  ark [-S|--session=I<httpie session>] [-b|--base=I<base>] \
+  [--who=I<who>] [--what=I<what>] [--when=I<when>] \
+  [--status=I<reserved|public>]
+	[-n|--dry-run] [-p|--print] \
+	I<cmd> [cmd-options]
+
+	where <cmd> = get|patch|put
+
+=cut
+
+: <<=cut
+
+=pod
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-S|--session=I<httpie_session>>
+
+Set the HTTP session variable. This allows you to maintain multiple
+authentication setups for your EZID, so that you can go back and forth between
+users.
+
+=item B<-s |--base=I<base>>
+Set the base that you want to use.  The base is a combination of the scheme,NAAN, and shoulder
+components of the identifier. The Default base is the EZID ark testing shoulder B<ark:/99999/fk4>.
+This is a safe place to do your testing.
+
+=item B<--who=I<who>>
+Metadata, who
+
+=item B<--what=I<what>>
+Metadata, what
+
+=item B<--when=I<when>>
+Metadata, when
+
+=item B<-n|--dry-run>
+Show what you would do do not really do it
+
+=item B<-p|--print>
+Adjust httpie --print= argument
+
+=back
+=cut
+
+function main.cmd () {
+    cmd=$1
+    shift;
+
+    case $cmd in
+	get | put | push ) # http requests
+	  $cmd $@;
+	  ;;
+  declare ) # informational requests
+    _${cmd} $@;
+    ;;
+	OPTIONS )	# http requests
+	  $cmd $@;
+	  ;;
+	*)
+	  echo  "$cmd not found";
+	  ;;
+    esac
+}
+
+: <<=cut
+=pod
+
+=head1 CMD
+
+=cut
+function main.options() {
+    OPTS=`getopt -o S:b:n --long session:,base:,proxy:,who:,what:,when:,print: -n 'ark' -- "$@"`
+
+    if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
+
+    eval set -- "$OPTS"
+
+    noop=0
+    HTTP[print]=hb
+    BASE[in]=ark:/99999/fk4
+    POST[_status]=reserved;
+    proxy=
+
+    log IN $@
+    while true; do
+	    case $1 in
+	      -S | --session) HTTP[session]=$2;  shift 2;;
+	      -b | --base) BASE[in]=$2;  shift 2;;
+	      -n | --dry-run) noop=1; shift ;;
+	      -P | --print) HTTP[print]=$2; shift 2;;
+        # Proxy
+        --proxy ) proxy=$2; shift 2;;
+        # Metadata items
+        --who ) POST[who]=$2 shift 2;;
+        --what ) POST[what]=$2 shift 2;;
+        --when ) POST[when]=$2 shift 2;;
+        --status ) POST[_status]=$2 shift 2;;
+
+	      -- ) shift; break;;
+	      *) shift; break;
+      esac
+    done
+
+    parse_base;
+    log CMD "$*"
+    CMD="$*"
+}
+
+function log() {
+  (>&2 echo LOG: $@)
+}
+
+
+function encode() {
+  # urlencode <string>
+  old_lc_collate=$LC_COLLATE
+  LC_COLLATE=C
+
+  local length="${#1}"
+  for (( i = 0; i < length; i++ )); do
+    local c="${1:i:1}"
+    case $c in
+#      [%:] ) printf '%%%02X' "'$c" ;;
+      [%:$'\n'$'\r'] ) printf '%%%02X' "'$c" ;;
+      * ) printf "$c" ;;
+# THis is URL encoding
+#      [a-zA-Z0-9.~_-]) printf "$c" ;;   # This is URL encoding
+#      *) printf '%%%02X' "'$c" ;;
+esac
+done
+
+  LC_COLLATE=$old_lc_collate
+}
+
+function decode() {
+  # urldecode <string>
+
+  local url_encoded="${1//+/ }"
+  printf '%b' "${url_encoded//%/\\x}"
+}
+
+# There are a number of ways to make the ark:
+# 1: Fully qualified ark:/?????/???.* => return ark
+#
+function parse_base() {
+  if [[ ${BASE[in]} =~ ^(ark:/)?([0-9][0-9][0-9][0-9][0-9]/)([a-z]*[0-9])$ ]]; then
+    BASE[scheme]=${BASH_REMATCH[1]};
+    BASE[naan]=${BASH_REMATCH[2]};
+    BASE[shoulder]=${BASH_REMATCH[3]};
+    BASE[base]=${BASE[scheme]}${BASE[naan]}${BASE[shoulder]}
+  else
+    log "--base=${BASE[in]} invalid base"
+    exit 1
+  fi
+}
+
+function fq_ark() {
+  local v
+  local blade
+  if [[ $1 =~ ^((ark:/)?([0-9][0-9][0-9][0-9][0-9]/)/)?([a-z]*[0-9])?([a-z,0-9]*)([a-z,0-9])(/.*)?$ ]]; then
+    v=${BASH_REMATCH[1]};
+    ARK[scheme]=${v:-${BASE[scheme]}}
+    ARK[scheme]=${BASE[scheme]}
+    v=${BASH_REMATCH[2]};
+    ARK[naan]=${v:-${BASE[naan]}}
+
+    v=${BASH_REMATCH[4]};
+    if [[ $v == ${BASE[shoulder]} ]]; then
+      ARK[shoulder]=${v};
+      ARK[blade]=${BASH_REMATCH[5]}
+    else
+      ARK[shoulder]=${BASE[shoulder]};
+      ARK[blade]=${v}${BASH_REMATCH[5]};
+    fi
+    ARK[tip]=${BASH_REMATCH[6]};
+    ARK[extension]=${BASH_REMATCH[7]};
+
+    ARK[fq]=${ARK[scheme]}${ARK[naan]}${ARK[shoulder]}${ARK[blade]}${ARK[tip]}
+
+#    log ark: $(declare -p ARK)
+
+    echo ${ARK[fq]}
+  else
+    log ARK: $1 invalid
+    exit 1;
+  fi
+}
+
+function _http () {
+  local options;
+  for idx in "${!HTTP[@]}"; do
+    options+="--${idx}=\"${HTTP[$idx]}\""
+  done
+  log http ${options} $@
+}
+
+# Direct HTTP Requests
+function get () {
+  for i in $@; do
+    _http GET https://ezid.cdlib.org/id/$(fq_ark $i)
+  done
+}
+
+function OPTIONS () {
+    _http OPTIONS $(url)
+}
+
+function HEAD () {
+    _http HEAD $(url)
+}
+
+: <<=cut
+=pod
+
+=head 2 Declare
+
+The declare command will print a bash style, declare statement for each passed ARK.
+
+=cut
+
+function _declare () {
+  for i in $@; do
+    log D $i;
+    fq_ark $i > /dev/null;
+    declare -p ARK
+  done
+}
+
+
+: <<=cut
+=pod
+
+=head1 AUTHOR
+
+Quinn Hart <qjhart@ucdavis.edu>
+
+=cut
+
+
+#MAIN
+# global Variables
+declare -A BASE
+declare -A ARK
+declare -A POST
+declare -A HTTP=([ssl]="tls1.2"
+                 [print]="hb");
+
+declare CMD
+
+main.options $@
+eval set -- "$CMD"		# sets the CMD after initial parse
+# This allows for interactive setup later :)
+main.cmd $@
+
+exit 0;

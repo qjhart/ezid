@@ -1,6 +1,71 @@
 #! /bin/bash
 
 # program at end of file. search #MAIN
+function to_anvl() {
+  eval "declare -A anvl="${1#*=}
+  for n in ${!anvl[@]}; do
+    echo $(encode "$n"): $(encode "${anvl[$n]}")
+  done
+}
+
+function anvl() {
+  declare -A anvl
+  local cont='^[ \t]+(.*)';
+  local nv='^([^:]+)[ \t]*:[ \t]*(.*)$'
+  local n
+  local v
+  while IFS='' read -r line || [[ -n "$line" ]] ; do
+    if [[ $line =~ ^# ]]; then
+      true
+    elif [[ $line =~ $cont ]]; then
+      line=${BASH_REMATCH[1]}
+      if [[ -n $n ]]; then
+        v+=" $line";
+      else
+        err 1 'Bad continuation: $line'
+      fi
+    elif [[ $line =~ $nv ]]; then
+      if [[ -n $n ]]; then
+        anvl[$n]=$v;
+        n=''
+      fi
+      n=${BASH_REMATCH[1]};
+      v=${BASH_REMATCH[2]};
+    else
+      err 1 "unknown $line"
+    fi
+  done
+
+  if [[ -n $n ]]; then
+    anvl[$n]=$(decode $v);
+    n=''
+  fi
+  declare -p anvl
+}
+
+function mint() {
+  log MINT "$@"
+    local opts=`getopt -o p:w: --long proxy:,who:,what:,when:,print: -n 'ezid mint' -- "$@"`
+    if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
+
+    eval set -- "$opts"
+
+    local proxy=
+
+    while true; do
+	    case $1 in
+        --proxy ) proxy=$2; shift 2;;
+        # Metadata items
+        --who ) POST[erc.who]=$2; shift 2;;
+        --what ) POST[erc.what]=$2; shift 2;;
+        --when ) POST[erc.when]=$2; shift 2;;
+        --status ) POST[_status]=$2; shift 2;;
+	      -- ) shift; break;;
+	      *) shift; break;
+      esac
+    done
+    to_anvl "$(declare -p POST)"
+}
 
 : <<=cut
 =pod
@@ -61,71 +126,46 @@ Adjust httpie --print= argument
 function main.cmd () {
     cmd=$1
     shift;
+    log CMD $1
 
     case $cmd in
-	get | put | push ) # http requests
-	  $cmd $@;
-	  ;;
-  declare ) # informational requests
-    _${cmd} $@;
-    ;;
-	OPTIONS )	# http requests
-	  $cmd $@;
-	  ;;
-	*)
-	  echo  "$cmd not found";
+      put )
+        create "$@"
+        ;;
+      post )
+        mint "$@"
+        ;;
+	    get | post | mint | push | fq | anvl | to_anvl ) # http requests
+	      $cmd "$@";
+	      ;;
+      declare ) # informational requests
+        _${cmd} "$@";
+        ;;
+	    OPTIONS )	# http requests
+	      $cmd $@;
+	      ;;
+	    *)
+	      echo  "$cmd not found";
 	  ;;
     esac
 }
 
-: <<=cut
-=pod
-
-=head1 CMD
-
-=cut
-function main.options() {
-    OPTS=`getopt -o S:b:n --long session:,base:,proxy:,who:,what:,when:,print: -n 'ark' -- "$@"`
-
-    if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
-
-    eval set -- "$OPTS"
-
-    noop=0
-    HTTP[print]=hb
-    BASE[in]=ark:/99999/fk4
-    POST[_status]=reserved;
-    proxy=
-
-    log IN $@
-    while true; do
-	    case $1 in
-	      -S | --session) HTTP[session]=$2;  shift 2;;
-	      -b | --base) BASE[in]=$2;  shift 2;;
-	      -n | --dry-run) noop=1; shift ;;
-	      -P | --print) HTTP[print]=$2; shift 2;;
-        # Proxy
-        --proxy ) proxy=$2; shift 2;;
-        # Metadata items
-        --who ) POST[who]=$2 shift 2;;
-        --what ) POST[what]=$2 shift 2;;
-        --when ) POST[when]=$2 shift 2;;
-        --status ) POST[_status]=$2 shift 2;;
-
-	      -- ) shift; break;;
-	      *) shift; break;
-      esac
-    done
-
-    parse_base;
-    log CMD "$*"
-    CMD="$*"
-}
 
 function log() {
   (>&2 echo LOG: $@)
 }
 
+function err() {
+  local n=1;
+  if [[ $1 = '--quiet' ]] ; then
+    n=$2;
+  else
+    n=$1
+    shift
+    (>&2 echo err: $@)
+  fi
+  exit $n;
+}
 
 function encode() {
   # urlencode <string>
@@ -170,18 +210,19 @@ function parse_base() {
   fi
 }
 
-function fq_ark() {
+function fq() {
   local v
   local blade
-  if [[ $1 =~ ^((ark:/)?([0-9][0-9][0-9][0-9][0-9]/)/)?([a-z]*[0-9])?([a-z,0-9]*)([a-z,0-9])(/.*)?$ ]]; then
-    v=${BASH_REMATCH[1]};
+  if [[ $1 =~ ^((ark:/)?([0-9][0-9][0-9][0-9][0-9]/))?([a-z]*[0-9])?([a-z,0-9]*)([a-z,0-9])(/.*)?$ ]]; then
+    log MATCH $(declare -p BASH_REMATCH)
+    v=${BASH_REMATCH[2]};
     ARK[scheme]=${v:-${BASE[scheme]}}
     ARK[scheme]=${BASE[scheme]}
-    v=${BASH_REMATCH[2]};
+    v=${BASH_REMATCH[3]};
     ARK[naan]=${v:-${BASE[naan]}}
 
     v=${BASH_REMATCH[4]};
-    if [[ $v == ${BASE[shoulder]} ]]; then
+    if [[ -n ${BASH_REMATCH[3]} || -n $v || $v == ${BASE[shoulder]}  ]]; then
       ARK[shoulder]=${v};
       ARK[blade]=${BASH_REMATCH[5]}
     else
@@ -192,9 +233,6 @@ function fq_ark() {
     ARK[extension]=${BASH_REMATCH[7]};
 
     ARK[fq]=${ARK[scheme]}${ARK[naan]}${ARK[shoulder]}${ARK[blade]}${ARK[tip]}
-
-#    log ark: $(declare -p ARK)
-
     echo ${ARK[fq]}
   else
     log ARK: $1 invalid
@@ -203,17 +241,26 @@ function fq_ark() {
 }
 
 function _http () {
-  local options;
-  for idx in "${!HTTP[@]}"; do
-    options+="--${idx}=\"${HTTP[$idx]}\""
-  done
-  log http ${options} $@
+  local stdinp=
+  local http="http --ssl=${INF4[http_ssl]} --session=${INF4[http_session]}"
+  if [[ $1 == '-n' || -n ${INF4[noop]} ]]; then
+    [[ $1 == '-n' ]] && shift
+    if [[ ! -t 0 ]]; then
+      IFS='' read -r -d '' stdinp;
+      log "$http $@ <<<'$stdinp'"
+    else
+      log "$http $@"
+    fi
+  else
+    log $http $@
+    $http $@
+  fi
 }
 
 # Direct HTTP Requests
 function get () {
   for i in $@; do
-    _http GET https://ezid.cdlib.org/id/$(fq_ark $i)
+    _http GET https://ezid.cdlib.org/id/$(fq $i)
   done
 }
 
@@ -255,17 +302,44 @@ Quinn Hart <qjhart@ucdavis.edu>
 
 #MAIN
 # global Variables
-declare -A BASE
+declare -A BASE=([in]='ark:/99999/fk4');
 declare -A ARK
-declare -A POST
+declare -A POST=([_status]='reserved');
+declare -A EZID=([noop]='');
 declare -A HTTP=([ssl]="tls1.2"
                  [print]="hb");
 
 declare CMD
 
-main.options $@
-eval set -- "$CMD"		# sets the CMD after initial parse
-# This allows for interactive setup later :)
-main.cmd $@
+while true; do
+	case $1 in
+	  -*) OPTS=($1); shift ;;
+	  -- ) shift; break;;
+	  *) break;
+	esac
+done
+
+function init() {
+    local opts=`getopt -o n --long session:,base:,proxy:,who:,what:,when:,print: -n 'ezid' -- "$@"`
+    if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
+
+    eval set -- "$opts"
+
+    while true; do
+	    case $1 in
+	      --session) HTTP[session]=$2;  shift 2;;
+	      --base) BASE[in]=$2;  shift 2;;
+	      -n | --dry-run) EZID[noop]=1; shift ;;
+	      --print) HTTP[print]=$2; shift 2;;
+	      -- ) shift; break;;
+	      *) shift; break;
+      esac
+    done
+
+    parse_base;
+}
+
+init $OPTS
+main.cmd "$@"
 
 exit 0;

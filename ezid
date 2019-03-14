@@ -1,6 +1,41 @@
 #! /bin/bash
 
 # program at end of file. search #MAIN
+function args_to_anvl() {
+  local nv='^([^:]+)[ \t]*:[ \t]*(.*)$'
+  local n
+  local v
+
+  declare -A update
+  while [[ -n $1 ]]; do
+	  case $1 in
+	    -- ) shift; break;;
+	    *)
+        if [[ $1 =~ $nv ]]; then
+          n=${BASH_REMATCH[1]};
+          v="${BASH_REMATCH[2]}";
+          update[$n]=$(decode "$v");
+        else
+          log rest $1
+          err 1 "Bad Option:" $1
+        fi
+        shift;;
+    esac
+  done
+
+  local inp
+  if [[ ! -t 0 ]]; then
+    inp=$(anvl -A)
+    eval "declare -A inp_anvl=${inp#*=}"
+  for n in ${!inp_anvl[@]}; do
+    update[$n]=${inp_anvl[$n]};
+  done
+  fi
+
+  local anvl=$(to_anvl "$(declare -p update)")
+  echo "$anvl"
+}
+
 function to_anvl() {
   eval "declare -A anvl="${1#*=}
   for n in ${!anvl[@]}; do
@@ -9,6 +44,25 @@ function to_anvl() {
 }
 
 function anvl() {
+  local opts=`getopt -o Ac:a: --long array,csv:,ark: -n 'ezid anvl' -- "$@"`
+
+  if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
+  eval set -- "$opts"
+
+  local array;
+  local ark;
+  while true; do
+	  case $1 in
+      -A | --array ) array=1; shift;;
+      -a | --ark ) ark=$2; shift;;
+      -c | --csv )
+        IFS=':' read -r -a csv <<< "$2"
+        shift 2;;
+	    -- ) shift; break;;
+	    *) shift; break;
+    esac
+  done
+
   declare -A anvl
   local cont='^[ \t]+(.*)';
   local nv='^([^:]+)[ \t]*:[ \t]*(.*)$'
@@ -26,26 +80,56 @@ function anvl() {
       fi
     elif [[ $line =~ $nv ]]; then
       if [[ -n $n ]]; then
-        anvl[$n]=$v;
+        anvl[$n]=$(decode "$v");
         n=''
       fi
       n=${BASH_REMATCH[1]};
-      v=${BASH_REMATCH[2]};
+      v="${BASH_REMATCH[2]}";
     else
       err 1 "unknown $line"
     fi
   done
 
   if [[ -n $n ]]; then
-    anvl[$n]=$(decode $v);
+    anvl[$n]=$(decode "$v");
     n=''
   fi
-  declare -p anvl
+
+  # Now print the output
+  local row
+  if [[ -n $array ]]; then
+    declare -p anvl
+  elif [[ -n $csv ]]; then
+    anvl[ark]=$ark;    # Allow specification of bad ark
+    local row
+    local i
+    for i in "${csv[@]}"; do
+      row+=,$(to_csv "${anvl[$i]}")
+    done
+    echo ${row:1}
+  fi
+}
+
+function login() {
+    local opts=`getopt -o a --long auth: -n 'ezid login' -- "$@"`
+    if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
+
+    eval set -- "$opts"
+
+    local auth=
+
+    while true; do
+	    case $1 in
+        -a | --auth ) auth=$2; shift 2;;
+	      -- ) shift; break;;
+	      *) shift; break;
+      esac
+    done
+   _http --auth=${auth} https://ezid.cdlib.org/login
 }
 
 function mint() {
-  log MINT "$@"
-    local opts=`getopt -o p:w: --long proxy:,who:,what:,when:,print: -n 'ezid mint' -- "$@"`
+    local opts=`getopt -o p: --long proxy: -n 'ezid mint' -- "$@"`
     if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
 
     eval set -- "$opts"
@@ -55,16 +139,65 @@ function mint() {
     while true; do
 	    case $1 in
         --proxy ) proxy=$2; shift 2;;
-        # Metadata items
-        --who ) POST[erc.who]=$2; shift 2;;
-        --what ) POST[erc.what]=$2; shift 2;;
-        --when ) POST[erc.when]=$2; shift 2;;
-        --status ) POST[_status]=$2; shift 2;;
 	      -- ) shift; break;;
 	      *) shift; break;
       esac
     done
-    to_anvl "$(declare -p POST)"
+
+    local anvl=$(args_to_anvl "$@")
+    local resp=$(_http --print=b POST https://ezid.cdlib.org/shoulder/${BASE[base]} Content-Type:text/plain <<<"$anvl")
+    resp=$(anvl -A <<<$resp);
+    eval "declare -A anvl="${resp#*=}
+    if [[ -z ${anvl[success]} ]]; then
+      err 1 "No success: $resp"
+    fi
+    ark=${anvl[success]}
+    echo $ark
+    if [[ -n $proxy ]]; then
+      log update ${anvl[success]} _target:${proxy}${ark}
+    fi
+}
+
+function update() {
+  local opts=`getopt -o c:Av --long csv:,array,verify -n 'ezid update' -- "$@"`
+  if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
+
+  eval set -- "$opts"
+
+  local csv
+  local array
+  local verify
+
+  while true; do
+	  case $1 in
+      -c | --csv ) csv="--csv=$2"; shift 2;;
+      -v | --verify) verify=1; shift ;;
+      -A | --array ) array='--array'; shift ;;
+	    -- ) shift; break;;
+	    *) shift; break;
+    esac
+  done
+
+  local ark_in=$1
+  local ark=https://ezid.cdlib.org/id/$(fq $1)
+  [[ $? != 0 ]] && err 1 '$1 is not a valid ark';
+  shift
+  log ARK $ark_in $ark
+
+  local anvl=$(args_to_anvl "$@")
+
+
+
+  local resp=$(_http --print=b POST $ark Content-Type:text/plain <<<"$anvl")
+  local rarr=$(anvl -A <<<$resp);
+  eval "declare -A anvl="${rarr#*=}
+  if [[ -z ${anvl[success]} ]]; then
+    err 1 "No success: $resp"
+  fi
+  local suc=${anvl[success]}
+  if [[ -n $verify || -n $csv || -n $array ]]; then
+    get $csv $array $ark_in
+  fi
 }
 
 : <<=cut
@@ -126,8 +259,6 @@ Adjust httpie --print= argument
 function main.cmd () {
     cmd=$1
     shift;
-    log CMD $1
-
     case $cmd in
       put )
         create "$@"
@@ -135,7 +266,7 @@ function main.cmd () {
       post )
         mint "$@"
         ;;
-	    get | post | mint | push | fq | anvl | to_anvl ) # http requests
+	    to_csv | login | get | post | mint | update | push | fq | anvl | to_anvl ) # http requests
 	      $cmd "$@";
 	      ;;
       declare ) # informational requests
@@ -176,7 +307,6 @@ function encode() {
   for (( i = 0; i < length; i++ )); do
     local c="${1:i:1}"
     case $c in
-#      [%:] ) printf '%%%02X' "'$c" ;;
       [%:$'\n'$'\r'] ) printf '%%%02X' "'$c" ;;
       * ) printf "$c" ;;
 # THis is URL encoding
@@ -213,24 +343,27 @@ function parse_base() {
 function fq() {
   local v
   local blade
-  if [[ $1 =~ ^((ark:/)?([0-9][0-9][0-9][0-9][0-9]/))?([a-z]*[0-9])?([a-z,0-9]*)([a-z,0-9])(/.*)?$ ]]; then
-    log MATCH $(declare -p BASH_REMATCH)
+  if [[ $1 =~ ^((ark:/)([0-9][0-9][0-9][0-9][0-9]/)([a-z]+[0-9]))?([a-z]+[0-9])([a-z,0-9]*)([a-z,0-9])(/.*)?$ ]]; then
+#    log MATCH $(declare -p BASH_REMATCH)
     v=${BASH_REMATCH[2]};
     ARK[scheme]=${v:-${BASE[scheme]}}
     ARK[scheme]=${BASE[scheme]}
     v=${BASH_REMATCH[3]};
     ARK[naan]=${v:-${BASE[naan]}}
 
-    v=${BASH_REMATCH[4]};
-    if [[ -n ${BASH_REMATCH[3]} || -n $v || $v == ${BASE[shoulder]}  ]]; then
-      ARK[shoulder]=${v};
-      ARK[blade]=${BASH_REMATCH[5]}
+    if [[ -n ${BASH_REMATCH[4]} ]]; then
+      ARK[shoulder]=${BASH_REMATCH[4]};
+      ARK[blade]=${BASH_REMATCH[5]}${BASH_REMATCH[6]}
+    elif [[ ${BASH_REMATCH[5]} == ${BASE[shoulder]} ]]; then
+      ARK[shoulder]=${BASE[shoulder]};
+      ARK[blade]=${BASH_REMATCH[6]};
     else
       ARK[shoulder]=${BASE[shoulder]};
-      ARK[blade]=${v}${BASH_REMATCH[5]};
+      ARK[blade]=${BASH_REMATCH[5]}${BASH_REMATCH[6]}
     fi
-    ARK[tip]=${BASH_REMATCH[6]};
-    ARK[extension]=${BASH_REMATCH[7]};
+
+    ARK[tip]=${BASH_REMATCH[7]};
+    ARK[extension]=${BASH_REMATCH[8]};
 
     ARK[fq]=${ARK[scheme]}${ARK[naan]}${ARK[shoulder]}${ARK[blade]}${ARK[tip]}
     echo ${ARK[fq]}
@@ -242,25 +375,72 @@ function fq() {
 
 function _http () {
   local stdinp=
-  local http="http --ssl=${INF4[http_ssl]} --session=${INF4[http_session]}"
-  if [[ $1 == '-n' || -n ${INF4[noop]} ]]; then
+  local http="http --check-status --ssl=${EZID[http_ssl]} --session=${EZID[http_session]} --print=${EZID[http_print]}"
+  if [[ $1 == '-n' || -n ${EZID[noop]} ]]; then
     [[ $1 == '-n' ]] && shift
     if [[ ! -t 0 ]]; then
       IFS='' read -r -d '' stdinp;
-      log "$http $@ <<<'$stdinp'"
+      log "$http $@ <<<$(printf "%q" "$stdinp")"
     else
       log "$http $@"
     fi
   else
-    log $http $@
-    $http $@
+    if [[ ! -t 0 ]]; then
+      IFS='' read -r -d '' stdinp;
+      $http $@  <<<"$stdinp"
+    else
+      $http $@
+    fi
+  fi
+}
+
+function to_csv() {
+  local csv=$1;
+  if [[ $csv =~ [,\"$'\n'] ]]; then
+    csv=$(sed -e 's/"/""/g' <<<$1)
+    echo "\"$csv\""
+  else
+    echo $csv
   fi
 }
 
 # Direct HTTP Requests
 function get () {
+  local opts=`getopt -o c:hA --long csv:,header,array -n 'ezid get' -- "$@"`
+  if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
+
+  eval set -- "$opts"
+
+  local header
+  local csv=''
+  local array=''
+  while true; do
+	  case $1 in
+      -A | --array ) array='-A'; shift;;
+      -c | --csv ) csv="$2"; shift 2;;
+      -h | --header )
+        header=1;
+        shift;;
+	    -- ) shift; break;;
+	    *) shift; break;
+    esac
+  done
+
+  local i
+  local arr;
+  local header_str
+  if [[ -n "$csv" && -n "$header" ]]; then
+    echo ${csv//:/,}
+  fi
+
+  [[ -n $csv ]] && csv="--csv=$csv"
   for i in $@; do
-    _http GET https://ezid.cdlib.org/id/$(fq $i)
+    if [[ -z $csv && -z $array ]]; then
+      _http GET https://ezid.cdlib.org/id/$(fq $i)
+    else
+      local resp=$(_http --print=b GET https://ezid.cdlib.org/id/$(fq $i))
+      anvl $csv $array --ark="$i" <<<$resp;
+    fi
   done
 }
 
@@ -303,13 +483,13 @@ Quinn Hart <qjhart@ucdavis.edu>
 #MAIN
 # global Variables
 declare -A BASE=([in]='ark:/99999/fk4');
-declare -A ARK
+declare -A ARK;
 declare -A POST=([_status]='reserved');
-declare -A EZID=([noop]='');
-declare -A HTTP=([ssl]="tls1.2"
-                 [print]="hb");
+declare -A EZID=([noop]=''
+                 [http_ssl]="tls1.2"
+                 [http_print]="hb"
+                 [http_session]="ezid");
 
-declare CMD
 
 while true; do
 	case $1 in
@@ -320,17 +500,17 @@ while true; do
 done
 
 function init() {
-    local opts=`getopt -o n --long session:,base:,proxy:,who:,what:,when:,print: -n 'ezid' -- "$@"`
+    local opts=`getopt -o n --long session:,base:,print:,http_print:,http_session: -n 'ezid' -- "$@"`
     if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
 
     eval set -- "$opts"
 
     while true; do
 	    case $1 in
-	      --session) HTTP[session]=$2;  shift 2;;
+	      --session | --http_session) EZID[http_session]=$2;  shift 2;;
 	      --base) BASE[in]=$2;  shift 2;;
 	      -n | --dry-run) EZID[noop]=1; shift ;;
-	      --print) HTTP[print]=$2; shift 2;;
+	      --print | --http_print) EZID[http_print]=$2; shift 2;;
 	      -- ) shift; break;;
 	      *) shift; break;
       esac

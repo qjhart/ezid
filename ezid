@@ -1,5 +1,159 @@
 #! /bin/bash
 
+: <<=cut
+=pod
+
+=head1  NAME
+
+ezid - Get, Add and Update ARKS via the EZID api
+
+=head1 SYNOPSIS
+
+  ezid [-S|--session=<httpie session>] [-b|--base=<base>] \
+  [-n|--dry-run] [-p|--print] [-h|--help]\
+  <command> [<args>]
+
+  where <command> is one of login, get, post|mint, put|create, update, fq, anvl, to_anvl
+
+=head2 EXAMPLES
+
+ezid B<get> [--array] [--csv=I<columns>] [--header] ARK(s)
+
+=head1 DESCRIPTION
+
+Ezid is a script that simplifies the retrieval, creation and update of ezid
+ARKS. Ezid uses as set of functions to communicate with the ezid services. Ezid
+uses a few other tools to perform the functions. In particular, ezid uses
+L<httpie|https://httpie.org/> for its http communcation. This allows users to
+combine ezid with other httpie requests when required. The man pages are also
+created from the PERL POD commands; pod2usage and pod2text.
+
+A good review of the organization of the ark: can be found in the L<ID
+Concepts|https://ezid.cdlib.org/learn/id_concepts> description.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-S|--session|--http_session=I<http_session>>
+
+Set the HTTPIE session variable. This allows you to maintain multiple
+authentication setups for your EZID, so that you can go back and forth between
+users. This is equivalent to the L<httpie|https://httpie.org/> session variable,
+and are shared with that command. Sessions primarily keep the basic
+authentication parameters saved.  By default the B<ezid> session is used.
+
+=item B<-s |--base=I<base>>
+
+Set the base that you want to use. The base is a combination of the scheme,NAAN,
+and shoulder components of the identifier. The default base is the EZID ark
+testing shoulder B<ark:/99999/fk4>. This is a safe place to do your testing. If
+you are using complete arks in your commands, this is not required, but if you
+are using shorthands, for example only using the blades of the arks, then the
+fully qualified arks are created from this base.
+
+=item B<-n|--dry-run>
+
+Show what you would do do not really do it. Because some commands require
+multiple access to the server, this command does not always work properly
+
+=item B<--print|http_print>
+Adjust httpie I<--print=> argument.  By default only the response body I<--print=b> is shown.
+
+=item B<-h|--help>
+
+Shows the manpage for the program
+
+=back
+
+=cut
+
+function init() {
+    local opts=`getopt -o nh --long session:,base:,print:,http_print:,http_session:,help -n 'ezid' -- "$@"`
+    if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
+
+    eval set -- "$opts"
+
+    while true; do
+	    case $1 in
+	      --session | --http_session) EZID[http_session]=$2;  shift 2;;
+	      --base) BASE[in]=$2;  shift 2;;
+	      -n | --dry-run) EZID[noop]=1; shift ;;
+	      --print | --http_print) EZID[http_print]=$2; shift 2;;
+        -h | --help ) exec pod2text $0;;
+	      -- ) shift; break;;
+	      *) shift; break;
+      esac
+    done
+
+    parse_base;
+}
+
+: <<=cut
+=pod
+
+=head1 EZID COMMANDS
+
+There are a number of ezid commands that are used in manipulating the ARKS.
+
+=over 4
+
+=item Retrieval
+
+B<ezid get> retrieves ARKs from the ezid server.  Can output in multiple formats.
+
+=item Additions and Updates
+
+B<ezid login>: Allows users to set and save their login parameters
+
+B<ezid mint>: Mint new Arks
+
+=back
+
+=cut
+
+function main.cmd () {
+    cmd=$1
+    shift;
+    case $cmd in
+      put )
+        create "$@"
+        ;;
+      post )
+        mint "$@"
+        ;;
+	    to_csv | login | get | post | mint | update | push | fq | anvl | to_anvl ) # http requests
+	      $cmd "$@";
+	      ;;
+      declare ) # informational requests
+        _${cmd} "$@";
+        ;;
+	    OPTIONS )	# http requests
+	      $cmd $@;
+	      ;;
+	    *)
+	      exec pod2usage $0
+	  ;;
+    esac
+}
+
+
+function log() {
+  (>&2 echo LOG: $@)
+}
+
+function err() {
+  local n=1;
+  if [[ $1 = '--quiet' ]] ; then
+    n=$2;
+  else
+    n=$1
+    shift
+    (>&2 echo err: $@)
+  fi
+  exit $n;
+}
+
 # program at end of file. search #MAIN
 function args_to_anvl() {
   local nv='^([^:]+)[ \t]*:[ \t]*(.*)$'
@@ -7,7 +161,8 @@ function args_to_anvl() {
   local v
 
   declare -A update
-  while [[ -n $1 ]]; do
+
+	while [[ -n $1 ]]; do
 	  case $1 in
 	    -- ) shift; break;;
 	    *)
@@ -27,9 +182,9 @@ function args_to_anvl() {
   if [[ ! -t 0 ]]; then
     inp=$(anvl -A)
     eval "declare -A inp_anvl=${inp#*=}"
-  for n in ${!inp_anvl[@]}; do
-    update[$n]=${inp_anvl[$n]};
-  done
+    for n in ${!inp_anvl[@]}; do
+      update[$n]=${inp_anvl[$n]};
+    done
   fi
 
   local anvl=$(to_anvl "$(declare -p update)")
@@ -110,51 +265,44 @@ function anvl() {
   fi
 }
 
-function login() {
-    local opts=`getopt -o a --long auth: -n 'ezid login' -- "$@"`
-    if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
-
-    eval set -- "$opts"
-
-    local auth=
-
-    while true; do
-	    case $1 in
-        -a | --auth ) auth=$2; shift 2;;
-	      -- ) shift; break;;
-	      *) shift; break;
-      esac
-    done
-   _http --auth=${auth} https://ezid.cdlib.org/login
-}
-
 function mint() {
-    local opts=`getopt -o p: --long proxy: -n 'ezid mint' -- "$@"`
+    local opts=`getopt -o p:c:vA --long proxy:,csv:,array,verify -n 'ezid mint' -- "$@"`
     if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
 
     eval set -- "$opts"
 
     local proxy=
+    local csv
+    local array
+    local verify
 
     while true; do
 	    case $1 in
         --proxy ) proxy=$2; shift 2;;
+        -c | --csv ) csv="--csv=$2"; shift 2;;
+        -v | --verify) verify=1; shift ;;
+        -A | --array ) array='--array'; shift ;;
 	      -- ) shift; break;;
 	      *) shift; break;
       esac
     done
 
-    local anvl=$(args_to_anvl "$@")
+    local anvl=$(args_to_anvl "$POST" "$@")
     local resp=$(_http --print=b POST https://ezid.cdlib.org/shoulder/${BASE[base]} Content-Type:text/plain <<<"$anvl")
     resp=$(anvl -A <<<$resp);
     eval "declare -A anvl="${resp#*=}
     if [[ -z ${anvl[success]} ]]; then
       err 1 "No success: $resp"
     fi
-    ark=${anvl[success]}
-    echo $ark
-    if [[ -n $proxy ]]; then
-      log update ${anvl[success]} _target:${proxy}${ark}
+    local ark=${anvl[success]}
+    if [[ -n $proxy && -n ${ark} ]]; then
+      sleep 1;
+      update ${ark} _target:${proxy}${ark}
+    fi
+    if [[ -n $verify || -n $csv || -n $array ]]; then
+      get $csv $array $ark
+    else
+      echo $ark
     fi
 }
 
@@ -182,11 +330,8 @@ function update() {
   local ark=https://ezid.cdlib.org/id/$(fq $1)
   [[ $? != 0 ]] && err 1 '$1 is not a valid ark';
   shift
-  log ARK $ark_in $ark
 
   local anvl=$(args_to_anvl "$@")
-
-
 
   local resp=$(_http --print=b POST $ark Content-Type:text/plain <<<"$anvl")
   local rarr=$(anvl -A <<<$resp);
@@ -198,104 +343,6 @@ function update() {
   if [[ -n $verify || -n $csv || -n $array ]]; then
     get $csv $array $ark_in
   fi
-}
-
-: <<=cut
-=pod
-
-=head1  NAME
-
-  ezid - Get, Add and Update ARKS via the EZID api
-
-=head1 USAGE
-
-  ark [-S|--session=I<httpie session>] [-b|--base=I<base>] \
-  [--who=I<who>] [--what=I<what>] [--when=I<when>] \
-  [--status=I<reserved|public>]
-	[-n|--dry-run] [-p|--print] \
-	I<cmd> [cmd-options]
-
-	where <cmd> = get|patch|put
-
-=cut
-
-: <<=cut
-
-=pod
-
-=head1 OPTIONS
-
-=over 4
-
-=item B<-S|--session=I<httpie_session>>
-
-Set the HTTP session variable. This allows you to maintain multiple
-authentication setups for your EZID, so that you can go back and forth between
-users.
-
-=item B<-s |--base=I<base>>
-Set the base that you want to use.  The base is a combination of the scheme,NAAN, and shoulder
-components of the identifier. The Default base is the EZID ark testing shoulder B<ark:/99999/fk4>.
-This is a safe place to do your testing.
-
-=item B<--who=I<who>>
-Metadata, who
-
-=item B<--what=I<what>>
-Metadata, what
-
-=item B<--when=I<when>>
-Metadata, when
-
-=item B<-n|--dry-run>
-Show what you would do do not really do it
-
-=item B<-p|--print>
-Adjust httpie --print= argument
-
-=back
-=cut
-
-function main.cmd () {
-    cmd=$1
-    shift;
-    case $cmd in
-      put )
-        create "$@"
-        ;;
-      post )
-        mint "$@"
-        ;;
-	    to_csv | login | get | post | mint | update | push | fq | anvl | to_anvl ) # http requests
-	      $cmd "$@";
-	      ;;
-      declare ) # informational requests
-        _${cmd} "$@";
-        ;;
-	    OPTIONS )	# http requests
-	      $cmd $@;
-	      ;;
-	    *)
-	      echo  "$cmd not found";
-	  ;;
-    esac
-}
-
-
-function log() {
-  (>&2 echo LOG: $@)
-}
-
-function err() {
-  local n=1;
-  if [[ $1 = '--quiet' ]] ; then
-    n=$2;
-  else
-    n=$1
-    shift
-    (>&2 echo err: $@)
-  fi
-  exit $n;
 }
 
 function encode() {
@@ -404,7 +451,40 @@ function to_csv() {
   fi
 }
 
-# Direct HTTP Requests
+: <<=cut
+=head2 GET
+
+ezid I<options> B<get> [--array] [--csv=I<columns>] [--header] ARK(s)
+
+B<ezid get> retrieves existing ARKS from the ezid server, and displays them
+either as anvl (default), csv or as a bash array for evaluation. The CSV format
+is most suitable for retrieving multiple arks.
+
+=head3 GET OPTIONS
+
+=over 4
+
+=item B<--csv=I<columns>>
+
+You can specify the columns that you would like to retrieve using this
+parameter. Somewhat following anvl conventions, the column names are B<:>
+delimited. This is a convenient way to create a table from a list of ARKs.
+
+=item B<--header>
+
+When specifing a I<--csv> command, this will include a header on the first row
+of the output.
+
+=item B<--array>
+
+This will output a bash style associative array from a given ARK, where each key
+of the array is a key of the retrieved ANVL format. these can be C<eval>ed for
+use later in a bash script. For example the command C<eval \$(./ezid get --array ark:/87287/d7q30n); echo \${anvl[_target]}>
+
+=back
+
+=cut
+
 function get () {
   local opts=`getopt -o c:hA --long csv:,header,array -n 'ezid get' -- "$@"`
   if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
@@ -444,6 +524,50 @@ function get () {
   done
 }
 
+:<<=cut
+=head2 LOGIN
+
+  ezid login --auth=USER[:PASS]
+
+B<ezid login> is a simple wrapper around the B<httpie --auth=USER:PASS> command.
+This allows users to setup their basic authorization, which is then stored in
+the standard httpie session paratmeters. It is possible to maintain multiple users,
+via the ezid I<--session> parameter to maintain different users, eg.
+
+  ezid --session=ucd-legacy login --auth=ucd-legacy
+
+After which the session C<ucd-legacy>
+
+=head3 LOGIN OPTIONS
+
+=over 4
+
+=item B<-a|--auth=USER[:PASS]>
+
+You specify the basic authentication for the ezid.cdlib.org server. If you only
+specify the USER, then you are prompted for the password.
+
+=back
+
+=cut
+function login() {
+    local opts=`getopt -o a --long auth: -n 'ezid login' -- "$@"`
+    if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
+
+    eval set -- "$opts"
+
+    local auth=
+
+    while true; do
+	    case $1 in
+        -a | --auth ) auth=$2; shift 2;;
+	      -- ) shift; break;;
+	      *) shift; break;
+      esac
+    done
+   _http --auth=${auth} https://ezid.cdlib.org/login
+}
+
 function OPTIONS () {
     _http OPTIONS $(url)
 }
@@ -455,7 +579,7 @@ function HEAD () {
 : <<=cut
 =pod
 
-=head 2 Declare
+=head2 ezid I<[options]> declare
 
 The declare command will print a bash style, declare statement for each passed ARK.
 
@@ -484,10 +608,10 @@ Quinn Hart <qjhart@ucdavis.edu>
 # global Variables
 declare -A BASE=([in]='ark:/99999/fk4');
 declare -A ARK;
-declare -A POST=([_status]='reserved');
+declare POST=$'_status:reserved';
 declare -A EZID=([noop]=''
                  [http_ssl]="tls1.2"
-                 [http_print]="hb"
+                 [http_print]="b"
                  [http_session]="ezid");
 
 
@@ -498,26 +622,6 @@ while true; do
 	  *) break;
 	esac
 done
-
-function init() {
-    local opts=`getopt -o n --long session:,base:,print:,http_print:,http_session: -n 'ezid' -- "$@"`
-    if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
-
-    eval set -- "$opts"
-
-    while true; do
-	    case $1 in
-	      --session | --http_session) EZID[http_session]=$2;  shift 2;;
-	      --base) BASE[in]=$2;  shift 2;;
-	      -n | --dry-run) EZID[noop]=1; shift ;;
-	      --print | --http_print) EZID[http_print]=$2; shift 2;;
-	      -- ) shift; break;;
-	      *) shift; break;
-      esac
-    done
-
-    parse_base;
-}
 
 init $OPTS
 main.cmd "$@"

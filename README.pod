@@ -1,0 +1,123 @@
+=head1  NAME
+
+ezid - Get, Add and Update ARKS via the EZID api
+
+=head1 SYNOPSIS
+
+  ezid [-S|--session=<httpie session>] [-b|--base=<base>] \
+  [-n|--dry-run] [-p|--print] [-h|--help]\
+  <command> [<args>]
+
+  where <command> is one of login, get, post|mint, put|create, update, fq, anvl, to_anvl
+
+=head2 EXAMPLES
+
+ezid B<get> [--array] [--csv=I<columns>] [--header] ARK(s)
+
+=head1 DESCRIPTION
+
+Ezid is a script that simplifies the retrieval, creation and update of ezid
+ARKS. Ezid uses as set of functions to communicate with the ezid services. Ezid
+uses a few other tools to perform the functions. In particular, ezid uses
+L<httpie|https://httpie.org/> for its http communcation. This allows users to
+combine ezid with other httpie requests when required. The man pages are also
+created from the PERL POD commands; pod2usage and pod2text.
+
+A good review of the organization of the ark: can be found in the L<ID
+Concepts|https://ezid.cdlib.org/learn/id_concepts> description.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-S|--session|--http_session=I<http_session>>
+
+Set the HTTPIE session variable. This allows you to maintain multiple
+authentication setups for your EZID, so that you can go back and forth between
+users. This is equivalent to the L<httpie|https://httpie.org/> session variable,
+and are shared with that command. Sessions primarily keep the basic
+authentication parameters saved.  By default the B<ezid> session is used.
+
+=item B<-s |--base=I<base>>
+
+Set the base that you want to use. The base is a combination of the scheme,NAAN,
+and shoulder components of the identifier. The default base is the EZID ark
+testing shoulder B<ark:/99999/fk4>. This is a safe place to do your testing. If
+you are using complete arks in your commands, this is not required, but if you
+are using shorthands, for example only using the blades of the arks, then the
+fully qualified arks are created from this base.
+
+=item B<-n|--dry-run>
+
+Show what you would do do not really do it. Because some commands require
+multiple access to the server, this command does not always work properly
+
+=item B<--print|http_print>
+Adjust httpie I<--print=> argument.  By default only the response body I<--print=b> is shown.
+
+=item B<-h|--help>
+
+Shows the manpage for the program
+
+=back
+
+=head1 EZID COMMANDS
+
+There are a number of ezid commands that are used in manipulating the ARKS.
+
+=over 4
+
+=item Retrieval
+
+B<ezid get> retrieves ARKs from the ezid server.  Can output in multiple formats.
+
+=item Additions and Updates
+
+B<ezid login>: Allows users to set and save their login parameters
+
+B<ezid mint>: Mint new Arks
+
+=back
+
+=head3 GET OPTIONS
+
+=over 4
+
+=item B<--csv=I<columns>>
+
+You can specify the columns that you would like to retrieve using this
+parameter. Somewhat following anvl conventions, the column names are B<:>
+delimited. This is a convenient way to create a table from a list of ARKs.
+
+=item B<--header>
+
+When specifing a I<--csv> command, this will include a header on the first row
+of the output.
+
+=item B<--array>
+
+This will output a bash style associative array from a given ARK, where each key
+of the array is a key of the retrieved ANVL format. these can be C<eval>ed for
+use later in a bash script. For example the command C<eval \$(./ezid get --array ark:/87287/d7q30n); echo \${anvl[_target]}>
+
+=back
+
+=head3 LOGIN OPTIONS
+
+=over 4
+
+=item B<-a|--auth=USER[:PASS]>
+
+You specify the basic authentication for the ezid.cdlib.org server. If you only
+specify the USER, then you are prompted for the password.
+
+=back
+
+=head2 ezid I<[options]> declare
+
+The declare command will print a bash style, declare statement for each passed ARK.
+
+=head1 AUTHOR
+
+Quinn Hart <qjhart@ucdavis.edu>
+

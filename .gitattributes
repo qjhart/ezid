@@ -1,2 +1,3 @@
-ezid -export-ignore
-* export-ignore
+ezid text
+README.* export-ignore
+.* export-ignore

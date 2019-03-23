@@ -1,6 +1,6 @@
 =head1  NAME
 
-ezid - Get, Add and Update ARKS via the EZID api
+ezid - Get, Add, Update, and delete ARKS via the EZID api
 
 =head1 SYNOPSIS
 
@@ -8,11 +8,12 @@ ezid - Get, Add and Update ARKS via the EZID api
   [-n|--dry-run] [-p|--print] [-h|--help]\
   <command> [<args>]
 
-  where <command> is one of login, get, post|mint, put|create, update, fq, anvl, to_anvl
+  where <command> is one of login, get, mint, put, update, delete, fq, anvl, to_anvl
 
 =head2 EXAMPLES
 
-ezid B<get> [--array] [--csv=I<columns>] [--header] ARK(s)
+  # This Example gets a CDL in
+  ezid get [--array] [--csv=I<columns>] [--header] ARK(s)
 
 =head1 DESCRIPTION
 
@@ -73,9 +74,13 @@ B<ezid get> retrieves ARKs from the ezid server.  Can output in multiple formats
 
 =item Additions and Updates
 
-B<ezid login>: Allows users to set and save their login parameters
+C<ezid login>: Allows users to set and save their login parameters
 
-B<ezid mint>: Mint new Arks
+C<ezid mint>: Mint new Arks.
+
+C<ezid update>: Updates an existing ARK
+
+C<ezid delete>: Deletes ARKS if their I<_status:reserved>.
 
 =back
 
@@ -110,6 +115,19 @@ use later in a bash script. For example the command C<eval \$(./ezid get --array
 
 You specify the basic authentication for the ezid.cdlib.org server. If you only
 specify the USER, then you are prompted for the password.
+
+=back
+
+=head3 LOGIN OPTIONS
+
+=over 4
+
+=item B<-a|--auth=USER[:PASS]>
+
+You specify the basic authentication for the ezid.cdlib.org server. If you only
+specify the USER, then you are prompted for the password.
+
+=back
 
 =back
 

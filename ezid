@@ -5,7 +5,7 @@
 
 =head1  NAME
 
-ezid - Get, Add and Update ARKS via the EZID api
+ezid - Get, Add, Update, and delete ARKS via the EZID api
 
 =head1 SYNOPSIS
 
@@ -13,11 +13,12 @@ ezid - Get, Add and Update ARKS via the EZID api
   [-n|--dry-run] [-p|--print] [-h|--help]\
   <command> [<args>]
 
-  where <command> is one of login, get, post|mint, put|create, update, fq, anvl, to_anvl
+  where <command> is one of login, get, mint, put, update, delete, fq, anvl, to_anvl
 
 =head2 EXAMPLES
 
-ezid B<get> [--array] [--csv=I<columns>] [--header] ARK(s)
+  # This Example gets a CDL in
+  ezid get [--array] [--csv=I<columns>] [--header] ARK(s)
 
 =head1 DESCRIPTION
 
@@ -104,9 +105,13 @@ B<ezid get> retrieves ARKs from the ezid server.  Can output in multiple formats
 
 =item Additions and Updates
 
-B<ezid login>: Allows users to set and save their login parameters
+C<ezid login>: Allows users to set and save their login parameters
 
-B<ezid mint>: Mint new Arks
+C<ezid mint>: Mint new Arks.
+
+C<ezid update>: Updates an existing ARK
+
+C<ezid delete>: Deletes ARKS if their I<_status:reserved>.
 
 =back
 
@@ -122,7 +127,7 @@ function main.cmd () {
       post )
         mint "$@"
         ;;
-	    to_csv | login | get | post | mint | update | push | fq | anvl | to_anvl ) # http requests
+	    to_csv | login | get | delete | post | mint | update | push | fq | anvl | to_anvl ) # http requests
 	      $cmd "$@";
 	      ;;
       declare ) # informational requests
@@ -390,7 +395,7 @@ function parse_base() {
 function fq() {
   local v
   local blade
-  if [[ $1 =~ ^((ark:/)([0-9][0-9][0-9][0-9][0-9]/)([a-z]+[0-9]))?([a-z]+[0-9])([a-z,0-9]*)([a-z,0-9])(/.*)?$ ]]; then
+  if [[ $1 =~ ^((ark:/)([0-9][0-9][0-9][0-9][0-9]/)([a-z]+[0-9]))?([a-z]*[0-9])([a-z,0-9]*)([a-z,0-9])(/.*)?$ ]]; then
 #    log MATCH $(declare -p BASH_REMATCH)
     v=${BASH_REMATCH[2]};
     ARK[scheme]=${v:-${BASE[scheme]}}
@@ -567,6 +572,61 @@ function login() {
     done
    _http --auth=${auth} https://ezid.cdlib.org/login
 }
+
+:<<=cut
+=head2 MINT
+
+  ezid --base=ark://99999/fk4 mint erc.what:'Example Item' erc.who:'The Library' ex.id:'Test Id'
+
+B<ezid mint> will create a new ARK identifier from the given C<--base>
+  is a simple wrapper around the B<httpie --auth=USER:PASS> command.
+This allows users to setup their basic authorization, which is then stored in
+the standard httpie session paratmeters. It is possible to maintain multiple users,
+via the ezid I<--session> parameter to maintain different users, eg.
+
+  ezid --base=ark://99999/fk4 mint erc.what:'Example Item' erc.who:'The Library' ex.id:'Test Id'
+
+After which the session C<ucd-legacy>
+
+=head3 LOGIN OPTIONS
+
+=over 4
+
+=item B<-a|--auth=USER[:PASS]>
+
+You specify the basic authentication for the ezid.cdlib.org server. If you only
+specify the USER, then you are prompted for the password.
+
+=back
+
+=cut
+
+
+: <<=cut
+=head2 DELETE
+
+  ezid I<options> delete [ARK(s)]
+
+B<ezid delete> deletes existing ARKS from the ezid server, if their current
+status is C<reserved>.
+
+=back
+
+=cut
+
+function delete () {
+  for i in $@; do
+    local resp=$(_http --print=b DELETE https://ezid.cdlib.org/id/$(fq $i))
+    resp=$(anvl -A <<<$resp);
+    eval "declare -A anvl="${resp#*=}
+    if [[ -z ${anvl[success]} ]]; then
+      err 1 "No success: $resp"
+    fi
+    echo ${anvl[success]}
+  done
+}
+
+
 
 function OPTIONS () {
     _http OPTIONS $(url)

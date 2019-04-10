@@ -129,8 +129,6 @@ specify the USER, then you are prompted for the password.
 
 =back
 
-=back
-
 =head2 ezid I<[options]> declare
 
 The declare command will print a bash style, declare statement for each passed ARK.

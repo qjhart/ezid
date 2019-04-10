@@ -610,8 +610,6 @@ specify the USER, then you are prompted for the password.
 B<ezid delete> deletes existing ARKS from the ezid server, if their current
 status is C<reserved>.
 
-=back
-
 =cut
 
 function delete () {

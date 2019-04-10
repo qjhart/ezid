@@ -301,7 +301,7 @@ function mint() {
     fi
     local ark=${anvl[success]}
     if [[ -n $proxy && -n ${ark} ]]; then
-      sleep 1;
+      #sleep 1;
       update ${ark} _target:${proxy}${ark}
     fi
     if [[ -n $verify || -n $csv || -n $array ]]; then

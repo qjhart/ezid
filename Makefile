@@ -2,3 +2,4 @@
 
 README.pod: ezid
 	podselect $< > $@
+	podchecker $@

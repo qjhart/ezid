@@ -66,16 +66,16 @@ as well.
 There are some informational commands that do not access the CDL server.
 
 C<ezid [--base=base] fq ark> will parse an ark, and either verify it, or expand
-it to a full ark if it is only a shoulder. See L<"/FQ"> for more information.
+it to a full ark if it is only a shoulder. See L</"FQ"> for more information.
 
 C<ezid anvl [--array] [--csv=items]> Will read anvl formatted data from C<stdin>
-and output it either as a bash array, or as a csv row.  See L<"/ANVL"> for more information.
+and output it either as a bash array, or as a csv row.  See L</"ANVL"> for more information.
 
 C<ezid args_to_anvl [key:value] [key2:anvl2]> will read passed key:value pairs
-from the commandline and output anvl format to C<stdout>.  See L<"/ARGS_TO_ANVL"> for more information.
+from the commandline and output anvl format to C<stdout>.  See L</"ARGS_TO_ANVL"> for more information.
 
 C<ezid array_to_anvl `declare -p bash_array`> will read the first parameter as
-serialized bash array, and parse that as anvl.  See L<"/ARRAY_TO_ANVL"> for more information.
+serialized bash array, and parse that as anvl.  See L</"ARRAY_TO_ANVL"> for more information.
 
 Next there are a set of commands that communicate with the CDL service. Note,
 that ezid uses L<httpie|https://httpie.org/> for its http communcation. This
@@ -84,21 +84,35 @@ infomation is stored using the standard C<httpie> methodology, see L</"GLOBAL
 OPTIONS"> for httpid options.
 
 C<ezid [options] get [--array] [--csv=list] ark(s)> retrieves ARKs from the ezid
-server. Can output in multiple formats.  See L<"/GET"> for more information.
+server. Can output in multiple formats.  See L</"GET"> for more information.
 
 C<ezid [--session=http_session] login --auth=user[:password] > Allows users to
-set and save their login parameters for further updates. See L<"/LOGIN"> for more information.
+set and save their login parameters for further updates. See L</"LOGIN"> for more information.
 
 C<ezid [global_options] mint [--proxy=proxy_server] [key:value] [key2:value2]
-...> will mint a new ark in the specified C<--base>.  See L<"/MINT"> for more information.
+...> will mint a new ark in the specified C<--base>.  See L</"MINT"> for more information.
 
 C<ezid [global_options] update ark [key:value] [key2:value2] ...> updates an
-existing ark with the passed key:value pairs.  See L<"/UPDATE"> for more information.
+existing ark with the passed key:value pairs.  See L</"UPDATE"> for more information.
 
 C<ezid [global_options delete ark(s)>: Deletes ARKS if current status is
-C<_status:reserved>. See L<"/DELETE"> for more information.
+C<_status:reserved>. See L</"DELETE"> for more information.
 
-=back
+=head2 FQ
+
+  ezid <--base=> fq [ark]
+
+C<ezid fq> will output the fully qualified C<ark:>.  This will combine
+the C<base> specifiation with the passed ark or ark:fragment, and
+guess at the fully qualified version.  Note that the C<--base> is an
+c<ezid> parameter, and not an option of this function.  Currently,
+this function does NOT use the parity check that is part of the ark:
+specification.
+
+  # verify an ark:
+  ezid --session=ucd-legacy login --auth=ucd-legacy
+
+After which the session C<ucd-legacy>
 
 =head3 ANVL OPTIONS
 
@@ -126,6 +140,47 @@ precedence.
 
 =back
 
+=head2 ARGS_TO_ANVL
+
+   ezid args_to_anvl [anvl parameters]
+
+C<ezid args_to_anvl> reads passed parameters as set of items to
+include in an ANVL file, and output that ANVL file to stdout.  In
+keeping with ANVL format, arguments are delinated into key:value pairs
+using the colon C<:>.  Like normal ANVL, if you want a colon as part
+of your key, then that needs to be escaped.  The actual values
+themselves will be verified and also escaped if they need to be.
+
+  # This is a simple example for two parameters
+  ezid args_to_anvl erc.who:Quinn erc.what:Eskimo
+
+  #This example shows that value escaping is a thing.
+  ./ezid args_to_anvl erc.who:Quinn erc.what:Eskimo where:$'The\nfrozen\north'
+
+=head2 ARRAY_TO_ANVL
+
+   ezid array_to_anvl "$(declare -p foo)"
+
+C<ezid array_to_anvl> reads a bash associated array as the mand
+outputs ANVL formatted data from C<stdin> and reformats it as an ANVL
+file.  This is typically a debug function, but could be used in script
+environment to mint values for example, where the output of this file
+is piped to the stdin for a C<ezid mint> command.
+
+  # This example converts a simple ANVL file to a bash array
+  declare -A foo;
+  foo[erc.who]=Quinn
+  foo[erc.what]=Eskimo
+  ezid array_to_anvl "$(declare -p foo)"
+
+=head2 GET
+
+ezid I<options> B<get> [--array] [--csv=I<columns>] [--header] ARK(s)
+
+B<ezid get> retrieves existing ARKS from the ezid server, and displays them
+either as anvl (default), csv or as a bash array for evaluation. The CSV format
+is most suitable for retrieving multiple arks.
+
 =head3 GET OPTIONS
 
 =over 4
@@ -149,6 +204,20 @@ use later in a bash script. For example the command C<eval \$(./ezid get --array
 ark:/87287/d7q30n); echo \${anvl[_target]}>
 
 =back
+
+=head2 LOGIN
+
+  ezid login --auth=USER[:PASS]
+
+B<ezid login> is a simple wrapper around the B<httpie --auth=USER:PASS> command.
+This allows users to setup their basic authorization, which is then stored in
+the standard httpie session paratmeters. It is possible to maintain multiple users,
+via the ezid I<--session> parameter to maintain different users, eg.
+
+  ezid --session=ucd-legacy --auth=ucd-legacy
+
+After which the session C<ucd-legacy>, will be set as a new httpie session, with
+the saved authorization.
 
 =head3 LOGIN OPTIONS
 
@@ -201,6 +270,14 @@ See L</GET> for output options.
 
 =back
 
+=head2 UPDATE
+
+  ezid [global_options] update --ark=ark [--verify] [--proxy=proxy_server] [key:value] [key:value] ...
+
+C<ezid update> updates and existing ark by overwriting any of the passed
+C<key:value> pairs. An existing C<--ark> is required, otherwise the function
+works exactly as the L</"MINT"> command. Please see L</"MINT"> on usage.
+
 =head3 UPDATE OPTIONS
 
 =over 4
@@ -214,49 +291,7 @@ Specify the ark to update.
 See L</MINT> for output options.
 
 =back
-=cut
 
-function update() {
-  local opts=`getopt -o c:Ava: --long csv:,array,verify,ark: -n 'ezid update' -- "$@"`
-  if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
-
-  eval set -- "$opts"
-
-  local csv
-  local array
-  local verify
-	local ark_in
-
-  while true; do
-	  case $1 in
-      -a | --ark ) ark_in="$2"; shift 2;;
-      -c | --csv ) csv="--csv=$2"; shift 2;;
-      -v | --verify) verify=1; shift ;;
-      -A | --array ) array='--array'; shift ;;
-	    -- ) shift; break;;
-	    *) shift; break;
-    esac
-  done
-
-	[[ -z $ark_in ]] && err 'Required --ark parmeter not specified.'
-  local ark=https://ezid.cdlib.org/id/$(fq $ark_in)
-	[[ $? != 0 ]] && err 1 '$ark_in is not a valid ark';
-
-  local anvl=$(args_to_anvl "$@")
-
-  local resp=$(_http --print=b POST $ark Content-Type:text/plain <<<"$anvl")
-  local rarr=$(anvl -A <<<$resp);
-  eval "declare -A anvl="${rarr#*=}
-  if [[ -z ${anvl[success]} ]]; then
-    err 1 "No success: $resp"
-  fi
-  local suc=${anvl[success]}
-  if [[ -n $verify || -n $csv || -n $array ]]; then
-    get $csv $array $ark_in
-  fi
-}
-
-: <<=cut
 =head2 DELETE
 
   ezid I<options> delete [ARK(s)]

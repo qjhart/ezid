@@ -8,26 +8,17 @@ ezid - Get, Add, Update, and delete ARKS via the EZID api
   [-n|--dry-run] [-p|--print] [-h|--help]\
   <command> [<args>]
 
-  where <command> is one of login, get, mint, put, update, delete, fq, anvl, to_anvl
-
-=head2 EXAMPLES
-
-  # This Example gets a CDL in
-  ezid get [--array] [--csv=I<columns>] [--header] ARK(s)
-
-=head1 DESCRIPTION
+  where <command> is one of fq, anvl, args_to_anvl, array_to_anvl, login, get, mint, put, update, delete
 
 Ezid is a script that simplifies the retrieval, creation and update of ezid
 ARKS. Ezid uses as set of functions to communicate with the ezid services. Ezid
-uses a few other tools to perform the functions. In particular, ezid uses
-L<httpie|https://httpie.org/> for its http communcation. This allows users to
-combine ezid with other httpie requests when required. The man pages are also
-created from the PERL POD commands; pod2usage and pod2text.
+uses a few other tools to perform the functions. L</"COMMANDS"> is summary of
+the commands that are available.
 
-A good review of the organization of the ark: can be found in the L<ID
-Concepts|https://ezid.cdlib.org/learn/id_concepts> description.
+A good review of the format and organization of an B<ark:> can be found in the
+L<ID Concepts|https://ezid.cdlib.org/learn/id_concepts> description.
 
-=head1 OPTIONS
+=head1 GLOBAL OPTIONS
 
 =over 4
 
@@ -51,36 +42,87 @@ fully qualified arks are created from this base.
 =item B<-n|--dry-run>
 
 Show what you would do do not really do it. Because some commands require
-multiple access to the server, this command does not always work properly
+multiple access to the server, this command does not always work properly :(.
 
 =item B<--print|http_print>
-Adjust httpie I<--print=> argument.  By default only the response body I<--print=b> is shown.
+
+Adjust httpie I<--print=> argument.  By default only the response body
+I<--print=b> is shown.
 
 =item B<-h|--help>
 
-Shows the manpage for the program
+Shows the manpage for the program. The help pages are embedded in the script and
+require the functions, C<pod2usage> and C<pod2text> to work properly.
 
 =back
 
-=head1 EZID COMMANDS
+=head1 COMMANDS
 
-There are a number of ezid commands that are used in manipulating the ARKS.
+There are a number of ezid commands that are used in manipulating the
+ARKS.  There are metadata commands to edit and create the required
+inputs, and there are commands to retrieve, create, and update records
+as well.
+
+There are some informational commands that do not access the CDL server.
+
+C<ezid [--base=base] fq ark> will parse an ark, and either verify it, or expand
+it to a full ark if it is only a shoulder. See L<"/FQ"> for more information.
+
+C<ezid anvl [--array] [--csv=items]> Will read anvl formatted data from C<stdin>
+and output it either as a bash array, or as a csv row.  See L<"/ANVL"> for more information.
+
+C<ezid args_to_anvl [key:value] [key2:anvl2]> will read passed key:value pairs
+from the commandline and output anvl format to C<stdout>.  See L<"/ARGS_TO_ANVL"> for more information.
+
+C<ezid array_to_anvl `declare -p bash_array`> will read the first parameter as
+serialized bash array, and parse that as anvl.  See L<"/ARRAY_TO_ANVL"> for more information.
+
+Next there are a set of commands that communicate with the CDL service. Note,
+that ezid uses L<httpie|https://httpie.org/> for its http communcation. This
+allows users to combine ezid with other httpie requests if required. Login
+infomation is stored using the standard C<httpie> methodology, see L</"GLOBAL
+OPTIONS"> for httpid options.
+
+C<ezid [options] get [--array] [--csv=list] ark(s)> retrieves ARKs from the ezid
+server. Can output in multiple formats.  See L<"/GET"> for more information.
+
+C<ezid [--session=http_session] login --auth=user[:password] > Allows users to
+set and save their login parameters for further updates. See L<"/LOGIN"> for more information.
+
+C<ezid [global_options] mint [--proxy=proxy_server] [key:value] [key2:value2]
+...> will mint a new ark in the specified C<--base>.  See L<"/MINT"> for more information.
+
+C<ezid [global_options] update ark [key:value] [key2:value2] ...> updates an
+existing ark with the passed key:value pairs.  See L<"/UPDATE"> for more information.
+
+C<ezid [global_options delete ark(s)>: Deletes ARKS if current status is
+C<_status:reserved>. See L<"/DELETE"> for more information.
+
+=back
+
+=head3 ANVL OPTIONS
 
 =over 4
 
-=item Retrieval
+=item B<--array>
 
-B<ezid get> retrieves ARKs from the ezid server.  Can output in multiple formats.
+This will output a bash style associative array from a given ARK, where each key
+of the array is a key of the retrieved ANVL format. these can be C<eval>ed for
+use later in a bash script.
 
-=item Additions and Updates
+=item B<--csv=I<columns>>
 
-C<ezid login>: Allows users to set and save their login parameters
+You can specify the columns that you would like to retrieve using this
+parameter. Somewhat following anvl conventions, the column names are B<:>
+delimited. This is a convenient way to create a table from a list of ARKs.
 
-C<ezid mint>: Mint new Arks.
+=item B<--ark>
 
-C<ezid update>: Updates an existing ARK
-
-C<ezid delete>: Deletes ARKS if their I<_status:reserved>.
+You can specify and ark to be associated with the input avnl
+data. This is a convenience primarily with the C<--csv> parameter, so
+that you can easily include an ark in CSV file output.  Note that if
+the ANVL input also specifies an C<ark:> parameter, then that takes
+precedence.
 
 =back
 
@@ -103,7 +145,8 @@ of the output.
 
 This will output a bash style associative array from a given ARK, where each key
 of the array is a key of the retrieved ANVL format. these can be C<eval>ed for
-use later in a bash script. For example the command C<eval \$(./ezid get --array ark:/87287/d7q30n); echo \${anvl[_target]}>
+use later in a bash script. For example the command C<eval \$(./ezid get --array
+ark:/87287/d7q30n); echo \${anvl[_target]}>
 
 =back
 
@@ -118,20 +161,147 @@ specify the USER, then you are prompted for the password.
 
 =back
 
-=head3 LOGIN OPTIONS
+=head3 MINT OPTIONS
 
 =over 4
 
-=item B<-a|--auth=USER[:PASS]>
+=item B<--proxy=proxy_server>
 
-You specify the basic authentication for the ezid.cdlib.org server. If you only
-specify the USER, then you are prompted for the password.
+Setting this parameter will cause the mint function, to perform an immediate
+L</"UPDATE"> where the target key value pair will be specified as
+C<_target:{proxy_server}{ark}>, the concatentation of the
+
+  ezid mint --proxy=https://ark.foo.edu/ -verify erc.who:Quinn erc.what:Eskimo
+    ./ezid mint --proxy=https://ark.foo.edu/ --verify erc.who:Quinn erc.what:Eskimo
+
+responds with:
+
+    success: ark:/99999/fk4qf9zb42
+    _updated: 1555441448
+    _target: https://ark.foo.edu/ark:/99999/fk4qf9zb42
+    erc.who: Quinn
+    _profile: erc
+    _export: yes
+    _owner: ucd-legacy
+    _ownergroup: ucd-library
+    _created: 1555441448
+    _status: reserved
+    erc.what: Eskimo
+
+
+=item B<--verify>
+
+After creating the ark, will L</"GET"> the ark to verify it was created. This
+will also output the record ANVL format, unless another option C<--array> or
+C<--csv> is specified.
+
+=item B<--csv=I<columns>> | =item B<--array>
+
+See L</GET> for output options.
 
 =back
 
-=head2 ezid I<[options]> declare
+=head3 UPDATE OPTIONS
 
-The declare command will print a bash style, declare statement for each passed ARK.
+=over 4
+
+=item B<--ark=ark>
+
+Specify the ark to update.
+
+=item B<--csv=I<columns>> | B<--array> | B<--verify>
+
+See L</MINT> for output options.
+
+=back
+=cut
+
+function update() {
+  local opts=`getopt -o c:Ava: --long csv:,array,verify,ark: -n 'ezid update' -- "$@"`
+  if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
+
+  eval set -- "$opts"
+
+  local csv
+  local array
+  local verify
+	local ark_in
+
+  while true; do
+	  case $1 in
+      -a | --ark ) ark_in="$2"; shift 2;;
+      -c | --csv ) csv="--csv=$2"; shift 2;;
+      -v | --verify) verify=1; shift ;;
+      -A | --array ) array='--array'; shift ;;
+	    -- ) shift; break;;
+	    *) shift; break;
+    esac
+  done
+
+	[[ -z $ark_in ]] && err 'Required --ark parmeter not specified.'
+  local ark=https://ezid.cdlib.org/id/$(fq $ark_in)
+	[[ $? != 0 ]] && err 1 '$ark_in is not a valid ark';
+
+  local anvl=$(args_to_anvl "$@")
+
+  local resp=$(_http --print=b POST $ark Content-Type:text/plain <<<"$anvl")
+  local rarr=$(anvl -A <<<$resp);
+  eval "declare -A anvl="${rarr#*=}
+  if [[ -z ${anvl[success]} ]]; then
+    err 1 "No success: $resp"
+  fi
+  local suc=${anvl[success]}
+  if [[ -n $verify || -n $csv || -n $array ]]; then
+    get $csv $array $ark_in
+  fi
+}
+
+: <<=cut
+=head2 DELETE
+
+  ezid I<options> delete [ARK(s)]
+
+B<ezid delete> deletes existing ARKS from the ezid server, if their current
+status is C<reserved>.
+
+=head1 SCRIPTING
+
+=head2 CSV SCRIPTING
+
+Scripting with CSV files can be hard, if you are trying to parse complicated csv
+files. So a good method of scripting with csv files is to use another tool. For
+example, the L<csvtool|https://colin.maudry.com/csvtool-manual-page/> is a nice
+tool for scripting on csv files. C<csvtool> allows you to call a script on each
+row of a csv file, passing the values as positional parameters. You can make a
+small wrapper script to translate these positional parameters to key:value
+pairs, and then run the tool over a csv file to create or update files.
+
+For example, assume you have a csv file, C<in.csv> like this:
+
+    who,what,more
+    Quinn,The Eskimo,Bob Dylan
+    Sloopy,Hang on,The McCoys
+
+You can create a small script file, C<mint.sh> that looks like this:
+
+     # /bin/bash
+     base=ark:/99999/fk4
+     proxy=https://digital.ucdavis.edu/
+     cols=success:_target:erc.who:erc.what
+     ezid --base=${base} mint --proxy=${proxy} --csv=${cols} erc.who:"$1" erc.what:"$2"
+
+Then you can mint arks, and save the minted arks back to a csv file like this.
+The example shows how you might use ~csvtool~ to select only a set of columns.
+In practive, the little wrapper script can be a good place to add constants, or
+manipulate the columns before sending them off to ezid.
+
+    csvtool namedcol who,what in.csv |\
+    head | tail -n +2 | csvtool call ./mint.sh - | tee out.csv
+
+With the following results:
+
+    ark:/99999/fk4qc17z06,https://digital.ucdavis.edu/ark:/99999/fk4qc17z06,Quinn,The Eskimo
+    ark:/99999/fk4km0j474,https://digital.ucdavis.edu/ark:/99999/fk4km0j474,Sloopy,Hang on
 
 =head1 AUTHOR
 

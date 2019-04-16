@@ -1,0 +1,35 @@
+Scripting with CSV files can be hard, if you are trying to parse complicated csv
+files. So a good method of scripting with csv files is to use another tool. For
+example, [[https://colin.maudry.com/csvtool-manual-page/][csvtool ]]is a nice tool for scripting on csv files. C<csvtool> allows
+you to call a script on each row of a csv file, passing the values as positional
+parameters. You can make a small wrapper script to translate these positional
+parameters to key:value pairs, and then run the tool over a csv file to create
+or update files.
+
+For example, assume you have a csv file, ~in.csv~ like this:
+
+    who,what,more
+    Quinn,The Eskimo,Bob Dylan
+    Sloopy,Hang on,The McCoys
+
+You can create a small script file, ~mint.sh~ that looks like this:
+
+    # /bin/bash
+    base=ark:/99999/fk4
+    ezid  mint --proxy=https://digital.ucdavis.edu/ --csv=success:erc.who:erc.what erc.who:"$1" erc.what:"$2"
+
+Then you can mint arks, and save the minted arks back to a csv file like this.
+The example shows how you might use ~csvtool~ to select only a set of columns.
+In practive, the little wrapper script can be a good place to add constants, or
+manipulate the columns before sending them off to ezid.
+
+#+BEGIN_SRC bash :results raw
+csvtool namedcol who,what in.csv |\
+head | tail -n +2 | csvtool call ./mint.sh - | tee out.csv
+#+END_SRC
+
+With the following results:
+
+#+RESULTS:
+ark:/99999/fk4qc17z06,https://digital.ucdavis.edu/ark:/99999/fk4qc17z06,Quinn,The Eskimo
+ark:/99999/fk4km0j474,https://digital.ucdavis.edu/ark:/99999/fk4km0j474,Sloopy,Hang on

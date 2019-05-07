@@ -1,0 +1,40 @@
+* Installation
+
+~ezid~ is a simple bash script.  You can install it in a number of ways.
+
+** make
+If you clone this repo, you can try `make install` which does some simple
+checks, and installs to the ~prefix=[~/.local/bin]~.
+
+#+BEGIN_SRC bash :results raw
+make install
+#+END_SRC
+
+#+RESULTS:
+podchecker is /usr/bin/podchecker
+http is /usr/bin/http
+pod2text is /usr/bin/pod2text
+install ezid /home/quinn/.local/bin
+
+To install somewhere else try something like
+
+#+BEGIN_SRC bash :results raw
+sudo make prefix=/usr/local install
+#+END_SRC
+
+#+RESULTS:
+podchecker is /usr/bin/podchecker
+http is /usr/bin/http
+pod2text is /usr/bin/pod2text
+install ezid /usr/local/bin
+
+** Manual
+
+You can also just copy ~ezid~ to wherever you want it.  In that case, you don't
+need to bother cloning the repo, and can just get the binary
+
+#+BEGIN_SRC bash
+wget https://github.com/ucd-library/ezid/raw/master/ezid
+cp ezid ~/.local/bin
+chmod 755 ~/.local/bin/ezid
+#+END_SRC

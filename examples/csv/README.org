@@ -8,15 +8,21 @@ or update files.
 
 For example, assume you have a csv file, ~in.csv~ like this:
 
+#+BEGIN_EXAMPLE
     who,what,more
     Quinn,The Eskimo,Bob Dylan
     Sloopy,Hang on,The McCoys
+#+END_EXAMPLE
 
-You can create a small script file, ~mint.sh~ that looks like this:
+You can create a small script file, ~mint.sh~.  This script basically just
+assigns the various columns to their metadata parameters.  ~mint.sh~ looks like this:
 
-    # /bin/bash
-    base=ark:/99999/fk4
-    ezid  mint --proxy=https://digital.ucdavis.edu/ --csv=success:erc.who:erc.what erc.who:"$1" erc.what:"$2"
+#+BEGIN_EXAMPLE
+# /bin/bash
+base=ark:/99999/fk4
+proxy=https://digital.ucdavis.edu/
+ezid mint --base=$base --proxy=$proxy --csv=success:erc.who:erc.what erc.who:"$1" erc.what:"$2"
+#+END_EXAMPLE
 
 Then you can mint arks, and save the minted arks back to a csv file like this.
 The example shows how you might use ~csvtool~ to select only a set of columns.
@@ -31,5 +37,8 @@ head | tail -n +2 | csvtool call ./mint.sh - | tee out.csv
 With the following results:
 
 #+RESULTS:
+
+#+BEGIN_EXAMPLE
 ark:/99999/fk4qc17z06,https://digital.ucdavis.edu/ark:/99999/fk4qc17z06,Quinn,The Eskimo
 ark:/99999/fk4km0j474,https://digital.ucdavis.edu/ark:/99999/fk4km0j474,Sloopy,Hang on
+#+END_EXAMPLE

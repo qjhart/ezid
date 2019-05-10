@@ -64,7 +64,7 @@ require the functions, C<pod2usage> and C<pod2text> to work properly.
 =cut
 
 function init() {
-    local opts=`getopt -o nh --long session:,base:,print:,http_print:,http_session:,help -n 'ezid' -- "$@"`
+    local opts=`${EZID[shell_getopt]} -o nh --long session:,base:,print:,http_print:,http_session:,help -n 'ezid' -- "$@"`
     if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
 
     eval set -- "$opts"
@@ -286,7 +286,7 @@ precedence.
 =cut
 
 function anvl() {
-  local opts=`getopt -o Ac:a: --long array,csv:,ark: -n 'ezid anvl' -- "$@"`
+  local opts=`${EZID[shell_getopt]} -o Ac:a: --long array,csv:,ark: -n 'ezid anvl' -- "$@"`
 
   if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
   eval set -- "$opts"
@@ -479,7 +479,7 @@ ark:/87287/d7q30n); echo \${anvl[_target]}>
 =cut
 
 function get () {
-  local opts=`getopt -o c:hA --long csv:,header,array -n 'ezid get' -- "$@"`
+  local opts=`${EZID[shell_getopt]} -o c:hA --long csv:,header,array -n 'ezid get' -- "$@"`
   if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
 
   eval set -- "$opts"
@@ -548,7 +548,7 @@ specify the USER, then you are prompted for the password.
 =cut
 
 function login() {
-    local opts=`getopt -o a --long auth: -n 'ezid login' -- "$@"`
+    local opts=`${EZID[shell_getopt]} -o a --long auth: -n 'ezid login' -- "$@"`
     if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
 
     eval set -- "$opts"
@@ -628,7 +628,7 @@ See L</GET> for output options.
 =cut
 
 function mint() {
-    local opts=`getopt -o p:c:vA --long proxy:,csv:,array,verify -n 'ezid mint' -- "$@"`
+    local opts=`${EZID[shell_getopt]} -o p:c:vA --long proxy:,csv:,array,verify -n 'ezid mint' -- "$@"`
     if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
 
     eval set -- "$opts"
@@ -695,7 +695,7 @@ See L</MINT> for output options.
 =cut
 
 function update() {
-  local opts=`getopt -o c:Ava: --long csv:,array,verify,ark: -n 'ezid update' -- "$@"`
+  local opts=`${EZID[shell_getopt]} -o c:Ava: --long csv:,array,verify,ark: -n 'ezid update' -- "$@"`
   if [ $? != 0 ] ; then echo "Bad Command Options." >&2 ; exit 1 ; fi
 
   eval set -- "$opts"
@@ -840,14 +840,13 @@ function to_csv() {
 
 # =cut
 
-# function _declare () {
+#function _declare () {
 #   for i in $@; do
 #     log D $i;
 #     fq_ark $i > /dev/null;
 #     declare -p ARK
 #   done
 # }
-
 
 
 : <<=cut
@@ -917,6 +916,11 @@ while true; do
 	  *) break;
 	esac
 done
+
+# Allow getopt to be somewhere else
+EZID[shell_getopt]=${FLAGS_GETOPT_CMD:-getopt}
+
+declare -p EZID
 
 init $OPTS
 main.cmd "$@"
